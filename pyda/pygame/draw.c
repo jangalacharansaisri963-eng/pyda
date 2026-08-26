@@ -1,8 +1,11 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <SDL2/SDL.h>
-#include <stdlib.h>
-#include <math.h>
+
+// Custom absolute value function (no standard libraries needed)
+static inline int pyda_abs(int n) {
+    return (n < 0) ? -n : n;
+}
 
 // Helper to extract SDL_Surface from Python capsule
 static SDL_Surface* get_surface_from_capsule(PyObject* capsule) {
@@ -14,7 +17,7 @@ static SDL_Surface* get_surface_from_capsule(PyObject* capsule) {
     return surf;
 }
 
-// Helper to parse color argument (supports tuples, lists, or packed integer/hex values)
+// Helper to parse color argument (supports tuples, lists, or packed integers)
 static int parse_color(PyObject* obj, Uint8* r, Uint8* g, Uint8* b, Uint8* a) {
     if (PyTuple_Check(obj) || PyList_Check(obj)) {
         Py_ssize_t size = PySequence_Size(obj);
@@ -39,12 +42,12 @@ static int parse_color(PyObject* obj, Uint8* r, Uint8* g, Uint8* b, Uint8* a) {
     return 0;
 }
 
-// --- 1. RECTANGLE DRAWING (Solid & Outlined with width) ---
+// --- 1. RECTANGLE DRAWING ---
 static PyObject* draw_rect(PyObject* self, PyObject* args) {
     PyObject* surf_capsule;
     PyObject* color_obj;
     int x, y, w, h;
-    int width = 0; // 0 means filled
+    int width = 0;
 
     if (!PyArg_ParseTuple(args, "OO(iiii)|i", &surf_capsule, &color_obj, &x, &y, &w, &h, &width)) {
         return NULL;
@@ -61,7 +64,6 @@ static PyObject* draw_rect(PyObject* self, PyObject* args) {
         SDL_Rect rect = {x, y, w, h};
         SDL_FillRect(surface, &rect, mapped);
     } else {
-        // Draw outline borders using custom rectangles
         SDL_Rect top = {x, y, w, width};
         SDL_Rect bottom = {x, y + h - width, w, width};
         SDL_Rect left = {x, y, width, h};
@@ -75,7 +77,7 @@ static PyObject* draw_rect(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
-// --- 2. LINE DRAWING (Bresenham's Algorithm) ---
+// --- 2. LINE DRAWING (Pure Integer Bresenham) ---
 static PyObject* draw_line(PyObject* self, PyObject* args) {
     PyObject* surf_capsule;
     PyObject* color_obj;
@@ -93,15 +95,13 @@ static PyObject* draw_line(PyObject* self, PyObject* args) {
     if (!parse_color(color_obj, &r, &g, &b, &a)) return NULL;
     Uint32 mapped = SDL_MapRGBA(surface->format, r, g, b, a);
 
-    // Lock surface if necessary
     if (SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
 
-    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int dx = pyda_abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -pyda_abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
     int err = dx + dy, e2;
 
     while (1) {
-        // Draw thick pixel point if width > 1
         for (int wx = 0; wx < width; wx++) {
             for (int wy = 0; wy < width; wy++) {
                 int px = x0 + wx;
@@ -125,12 +125,12 @@ static PyObject* draw_line(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
-// --- 3. CIRCLE DRAWING (Midpoint Circle Algorithm) ---
+// --- 3. CIRCLE DRAWING (Pure Integer Midpoint Algorithm) ---
 static PyObject* draw_circle(PyObject* self, PyObject* args) {
     PyObject* surf_capsule;
     PyObject* color_obj;
     int cx, cy, radius;
-    int width = 0; // 0 = filled
+    int width = 0;
 
     if (!PyArg_ParseTuple(args, "OO(ii)i|i", &surf_capsule, &color_obj, &cx, &cy, &radius, &width)) {
         return NULL;
@@ -150,32 +150,26 @@ static PyObject* draw_circle(PyObject* self, PyObject* args) {
     int err = 0;
 
     while (x >= y) {
-        // Symmetric points mapping helper macro
-        #define DRAW_CIRCLE_POINTS(px, py) do { \
-            int pts[8][2] = { \
-                {cx + px, cy + py}, {cx - px, cy + py}, \
-                {cx + px, cy - py}, {cx - px, cy - py}, \
-                {cx + py, cy + px}, {cx - py, cy + px}, \
-                {cx + py, cy - px}, {cx - py, cy - px}  \
-            }; \
-            for(int i=0; i<8; i++) { \
-                int rx = pts[i][0], ry = pts[i][1]; \
-                if (rx >= 0 && rx < surface->w && ry >= 0 && ry < surface->h) { \
-                    Uint8* target = (Uint8*)surface->pixels + ry * surface->pitch + rx * surface->format->BytesPerPixel; \
-                    if (surface->format->BytesPerPixel == 4) *(Uint32*)target = mapped; \
-                } \
-            } \
-        } while(0)
-
         if (width <= 0) {
-            // Filled circle scanlines
             for (int dy = -y; dy <= y; dy++) {
                 int rx1 = cx - x, rx2 = cx + x;
                 SDL_Rect scanline = {rx1, cy + dy, (rx2 - rx1) + 1, 1};
                 SDL_FillRect(surface, &scanline, mapped);
             }
         } else {
-            DRAW_CIRCLE_POINTS(x, y);
+            int pts[8][2] = {
+                {cx + x, cy + y}, {cx - x, cy + y},
+                {cx + x, cy - y}, {cx - x, cy - y},
+                {cx + y, cy + x}, {cx - y, cy + x},
+                {cx + y, cy - x}, {cx - y, cy - x}
+            };
+            for(int i = 0; i < 8; i++) {
+                int rx = pts[i][0], ry = pts[i][1];
+                if (rx >= 0 && rx < surface->w && ry >= 0 && ry < surface->h) {
+                    Uint8* target = (Uint8*)surface->pixels + ry * surface->pitch + rx * surface->format->BytesPerPixel;
+                    if (surface->format->BytesPerPixel == 4) *(Uint32*)target = mapped;
+                }
+            }
         }
 
         y++;
@@ -192,20 +186,15 @@ static PyObject* draw_circle(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
-// --- MODULE METHODS TABLE ---
 static PyMethodDef DrawMethods[] = {
-    {"rect", draw_rect, METH_VARARGS, "Draw filled or outlined rectangle"},
-    {"line", draw_line, METH_VARARGS, "Draw a straight line"},
-    {"circle", draw_circle, METH_VARARGS, "Draw a circle"},
+    {"rect", draw_rect, METH_VARARGS, "Draw rectangle"},
+    {"line", draw_line, METH_VARARGS, "Draw line"},
+    {"circle", draw_circle, METH_VARARGS, "Draw circle"},
     {NULL, NULL, 0, NULL}
 };
 
 static struct PyModuleDef draw_module = {
-    PyModuleDef_HEAD_INIT, 
-    "_draw", 
-    "High-performance native drawing extension", 
-    -1, 
-    DrawMethods
+    PyModuleDef_HEAD_INIT, "_draw", "Zero-dependency pure C draw module", -1, DrawMethods
 };
 
 PyMODINIT_FUNC PyInit__draw(void) {
