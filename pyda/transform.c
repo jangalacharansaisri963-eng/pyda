@@ -45,7 +45,7 @@ static PyObject* pyda_transform_scale(PyObject* self, PyObject* args) {
     }
 
     // Preserve color key / alpha blending settings if present
-    if (src->flags & SDL_SRCCOLORKEY) {
+    if (SDL_HasColorKey(src)) {
         Uint32 colorkey;
         SDL_GetColorKey(src, &colorkey);
         SDL_SetColorKey(dst, SDL_TRUE, colorkey);
