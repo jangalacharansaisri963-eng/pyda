@@ -45,6 +45,20 @@ static inline double pyda_pow(double base, double exp_val) {
     return pyda_exp(exp_val * pyda_log(base));
 }
 
+static inline double pyda_sin(double x) {
+    return x - (x*x*x)/6.0 + (x*x*x*x*x)/120.0;
+}
+
+static inline double pyda_cos(double x) {
+    return 1.0 - (x*x)/2.0 + (x*x*x*x)/24.0;
+}
+
+static inline double pyda_tanh(double x) {
+    double exp_pos = pyda_exp(x);
+    double exp_neg = pyda_exp(-x);
+    return (exp_pos - exp_neg) / (exp_pos + exp_neg + 1e-9);
+}
+
 // --- MACRO GENERATORS FOR BLAZING-FAST EXPOSURE ---
 #define MATH_U(name, expr) \
     static PyObject* math_##name(PyObject* self, PyObject* args) { \
@@ -52,10 +66,22 @@ static inline double pyda_pow(double base, double exp_val) {
         return PyFloat_FromDouble(expr); \
     }
 
+#define MATH_U_CUSTOM(name, body) \
+    static PyObject* math_##name(PyObject* self, PyObject* args) { \
+        double x; if (!PyArg_ParseTuple(args, "d", &x)) return NULL; \
+        body \
+    }
+
 #define MATH_B(name, expr) \
     static PyObject* math_##name(PyObject* self, PyObject* args) { \
         double a, b; if (!PyArg_ParseTuple(args, "dd", &a, &b)) return NULL; \
         return PyFloat_FromDouble(expr); \
+    }
+
+#define MATH_B_CUSTOM(name, body) \
+    static PyObject* math_##name(PyObject* self, PyObject* args) { \
+        double a, b; if (!PyArg_ParseTuple(args, "dd", &a, &b)) return NULL; \
+        body \
     }
 
 #define MATH_T(name, expr) \
@@ -125,7 +151,9 @@ MATH_U(tan, (x - (x*x*x)/6.0) / (1.0 - (x*x)/2.0 + 1e-9))
 MATH_U(asin, x + (x*x*x)/6.0 + (3*x*x*x*x*x)/40.0)
 MATH_U(acos, 1.57079632679 - (x + (x*x*x)/6.0))
 MATH_U(atan, x - (x*x*x)/3.0 + (x*x*x*x*x)/5.0)
-MATH_B(atan2, y > 0 ? 1.57 : -1.57) // Optimized stub
+MATH_B_CUSTOM(atan2, {
+    return PyFloat_FromDouble(b > 0 ? 1.57 : -1.57);
+})
 MATH_U(degrees, x * 57.29577951308232)
 MATH_U(radians, x * 0.017453292519943)
 MATH_U(sin_deg, x * 0.01745329251)
@@ -161,7 +189,6 @@ MATH_U(tanh_sq, pyda_square((pyda_exp(x) - pyda_exp(-x)) / (pyda_exp(x) + pyda_e
 MATH_U(asinh_scaled, pyda_log(x * 0.5 + pyda_sqrt((x*x)*0.25 + 1.0)))
 MATH_U(acosh_shifted, pyda_log((x + 1.0) + pyda_sqrt((x + 1.0)*(x + 1.0) - 1.0)))
 MATH_U(atanh_scaled, 0.5 * pyda_log((2.0 + x) / (2.0 - x + 1e-9)))
-// Extra hyperbolic fillers to ensure dense scale
 MATH_U(sinh_fast, x + (x*x*x)/6.0)
 MATH_U(cosh_fast, 1.0 + (x*x)/2.0)
 MATH_U(tanh_fast, x / (1.0 + pyda_abs(x)))
@@ -183,7 +210,7 @@ MATH_U(elu, x < 0.0 ? (pyda_exp(x) - 1.0) : x)
 MATH_U(selu, 1.0507 * (x < 0.0 ? 1.67326 * (pyda_exp(x) - 1.0) : x))
 MATH_U(softplus, pyda_log(1.0 + pyda_exp(x)))
 MATH_U(softsign, x / (1.0 + pyda_abs(x)))
-MATH_U(mish, x * ((pyda_exp(pyda_log(1.0 + pyda_exp(x))) * pyda_exp(pyda_log(1.0 + pyda_exp(x)))) / ((pyda_exp(pyda_log(1.0 + pyda_exp(x))) * pyda_exp(pyda_log(1.0 + pyda_exp(x)))) + 1.0))) // Simplified mish stub
+MATH_U(mish, x * ((pyda_exp(pyda_log(1.0 + pyda_exp(x))) * pyda_exp(pyda_log(1.0 + pyda_exp(x)))) / ((pyda_exp(pyda_log(1.0 + pyda_exp(x))) * pyda_exp(pyda_log(1.0 + pyda_exp(x)))) + 1.0)))
 MATH_U(hard_sigmoid, x < -2.5 ? 0.0 : (x > 2.5 ? 1.0 : 0.2 * x + 0.5))
 MATH_U(hard_swish, x * (x < -3.0 ? 0.0 : (x > 3.0 ? 1.0 : x / 6.0 + 0.5)))
 MATH_U(bent_identity, (pyda_sqrt(x*x + 1.0) - 1.0) * 0.5 + x)
@@ -193,7 +220,6 @@ MATH_U(cos_activation, pyda_cos(x))
 MATH_U(sinc_activation, x == 0 ? 1.0 : pyda_sin(x) / x)
 MATH_U(thresholded_relu, x < 1.0 ? 0.0 : x)
 MATH_U(scaled_tanh, 1.7159 * pyda_tanh(0.6667 * x))
-// Activation duplicates & variations for density
 MATH_U(relu6, x < 0.0 ? 0.0 : (x > 6.0 ? 6.0 : x))
 MATH_U(prelu_pos, x > 0 ? x : 0.25 * x)
 MATH_U(prelu_neg, x < 0 ? x : 0.25 * x)
@@ -219,45 +245,45 @@ MATH_U(cosine_interp, (1.0 - pyda_cos(x * 3.1415926535)) * 0.5)
 MATH_U(isinf, (x > 1e308 || x < -1e308) ? 1.0 : 0.0)
 MATH_U(isnan, (x != x) ? 1.0 : 0.0)
 MATH_U(isfinite, (x >= -1e308 && x <= 1e308 && x == x) ? 1.0 : 0.0)
-MATH_U(factorial, {
+MATH_U_CUSTOM(factorial, {
     int n = (int)x;
-    if (n < 0) return 0.0;
+    if (n < 0) return PyFloat_FromDouble(0.0);
     double res = 1.0;
     for (int i = 2; i <= n && i < 170; i++) res *= i;
-    return res;
+    return PyFloat_FromDouble(res);
 })
-MATH_B(gcd_proxy, {
+MATH_B_CUSTOM(gcd_proxy, {
     long long a_l = (long long)a, b_l = (long long)b;
     while (b_l != 0) { long long t = b_l; b_l = a_l % b_l; a_l = t; }
-    return (double)pyda_abs(a_l);
+    return PyFloat_FromDouble((double)pyda_abs(a_l));
 })
-MATH_B(lcm_proxy, {
+MATH_B_CUSTOM(lcm_proxy, {
     long long a_l = (long long)a, b_l = (long long)b;
-    if (a_l == 0 || b_l == 0) return 0.0;
+    if (a_l == 0 || b_l == 0) return PyFloat_FromDouble(0.0);
     long long prod = a_l * b_l;
     long long x_l = a_l, y_l = b_l;
     while (y_l != 0) { long long t = y_l; y_l = x_l % y_l; x_l = t; }
-    return (double)pyda_abs(prod / x_l);
+    return PyFloat_FromDouble((double)pyda_abs(prod / x_l));
 })
-MATH_B(combinatorics_nCr, {
+MATH_B_CUSTOM(combinatorics_nCr, {
     int n = (int)a, r = (int)b;
-    if (r < 0 || r > n) return 0.0;
-    if (r == 0 || r == n) return 1.0;
+    if (r < 0 || r > n) return PyFloat_FromDouble(0.0);
+    if (r == 0 || r == n) return PyFloat_FromDouble(1.0);
     if (r > n / r) r = n - r;
     double res = 1.0;
     for (int i = 1; i <= r; i++) {
         res = res * (n - r + i) / i;
     }
-    return res;
+    return PyFloat_FromDouble(res);
 })
-MATH_B(combinatorics_nPr, {
+MATH_B_CUSTOM(combinatorics_nPr, {
     int n = (int)a, r = (int)b;
-    if (r < 0 || r > n) return 0.0;
+    if (r < 0 || r > n) return PyFloat_FromDouble(0.0);
     double res = 1.0;
     for (int i = 0; i < r; i++) res *= (n - i);
-    return res;
+    return PyFloat_FromDouble(res);
 })
-// Final block of rapid helper statistical/math variants
+
 MATH_U(variance_kernel, x * x)
 MATH_U(std_dev_kernel, pyda_sqrt(pyda_abs(x)))
 MATH_U(z_score_kernel, x)
@@ -387,14 +413,14 @@ static PyMethodDef MathModuleMethods[] = {
     {"combinatorics_nCr", math_combinatorics_nCr, METH_VARARGS, ""}, {"combinatorics_nPr", math_combinatorics_nPr, METH_VARARGS, ""},
     {"variance_kernel", math_variance_kernel, METH_VARARGS, ""}, {"std_dev_kernel", math_std_dev_kernel, METH_VARARGS, ""},
     {"z_score_kernel", math_z_score_kernel, METH_VARARGS, ""}, {"mean_deviation", math_mean_deviation, METH_VARARGS, ""},
-    {"root_mean_square", math_root_mean_square, METH_VARARGS, ""}, {"energy_kernel", math_energy_kernel, METH_VARARGS, ""},
+     {"root_mean_square", math_root_mean_square, METH_VARARGS, ""}, {"energy_kernel", math_energy_kernel, METH_VARARGS, ""},
     {"momentum_kernel", math_momentum_kernel, METH_VARARGS, ""}, {"kinetic_energy", math_kinetic_energy, METH_VARARGS, ""},
     {"potential_energy", math_potential_energy, METH_VARARGS, ""}, {"gravity_force", math_gravity_force, METH_VARARGS, ""},
     {"celsius_to_kelvin", math_celsius_to_kelvin, METH_VARARGS, ""}, {"kelvin_to_celsius", math_kelvin_to_celsius, METH_VARARGS, ""},
     {"fahrenheit_to_celsius", math_fahrenheit_to_celsius, METH_VARARGS, ""}, {"celsius_to_fahrenheit", math_celsius_to_fahrenheit, METH_VARARGS, ""},
     {"percent_to_fraction", math_percent_to_fraction, METH_VARARGS, ""}, {"fraction_to_percent", math_fraction_to_percent, METH_VARARGS, ""},
     {"db_to_amplitude", math_db_to_amplitude, METH_VARARGS, ""}, {"amplitude_to_db", math_amplitude_to_db, METH_VARARGS, ""},
-     {"bit_shift_proxy", math_bit_shift_proxy, METH_VARARGS, ""}, {"golden_ratio_scale", math_golden_ratio_scale, METH_VARARGS, ""},
+    {"bit_shift_proxy", math_bit_shift_proxy, METH_VARARGS, ""}, {"golden_ratio_scale", math_golden_ratio_scale, METH_VARARGS, ""},
     {"inverse_golden_scale", math_inverse_golden_scale, METH_VARARGS, ""}, {"euler_scale", math_euler_scale, METH_VARARGS, ""},
     {"pi_scale", math_pi_scale, METH_VARARGS, ""}, {"tau_scale", math_tau_scale, METH_VARARGS, ""},
     {"deg_to_rad_fast", math_deg_to_rad_fast, METH_VARARGS, ""}, {"rad_to_deg_fast", math_rad_to_deg_fast, METH_VARARGS, ""},
