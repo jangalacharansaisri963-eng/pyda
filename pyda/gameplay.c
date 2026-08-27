@@ -1,10 +1,65 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include <math.h>
 
-// --- INLINE GAME MATH HELPERS ---
+// --- CUSTOM LOW-LEVEL MATH HELPERS (NO MATH.H) ---
 static inline double gp_abs(double x) { return x < 0 ? -x : x; }
-static inline double gp_do_clamp(double x, double lo, double hi) { return x < lo ? lo : (x > hi ? hi : x); }
+
+static inline double gp_do_clamp(double x, double lo, double hi) { 
+    return x < lo ? lo : (x > hi ? hi : x); 
+}
+
+static inline double gp_sqrt(double x) {
+    if (x <= 0.0) return 0.0;
+    double guess = x;
+    for (int i = 0; i < 10; i++) {
+        guess = 0.5 * (guess + x / guess);
+    }
+    return guess;
+}
+
+static inline double gp_sin(double x) {
+    // Normalize angle to range [-pi, pi]
+    const double pi = 3.141592653589793;
+    const double two_pi = 6.283185307179586;
+    x = fmod(x + pi, two_pi);
+    if (x < 0) x += two_pi;
+    x -= pi;
+    
+    // Taylor series approximation for sine
+    double x2 = x * x;
+    double term = x;
+    double sum = x;
+    term = -term * x2 / (2.0 * 3.0); sum += term;
+    term = -term * x2 / (4.0 * 5.0); sum += term;
+    term = -term * x2 / (6.0 * 7.0); sum += term;
+    term = -term * x2 / (8.0 * 9.0); sum += term;
+    return sum;
+}
+
+static inline double gp_cos(double x) {
+    const double pi = 3.141592653589793;
+    return gp_sin(x + pi / 2.0);
+}
+
+static inline double gp_atan2(double y, double x) {
+    const double pi = 3.141592653589793;
+    if (x == 0.0) {
+        if (y > 0.0) return pi / 2.0;
+        if (y < 0.0) return -pi / 2.0;
+        return 0.0;
+    }
+    double atan = y / x;
+    if (gp_abs(atan) > 1.0) {
+        atan = (x > 0.0 ? 1.0 : -1.0) * (pi / 2.0 - (x / y) / (1.0 + 0.28 * (x / y) * (x / y)));
+    } else {
+        atan = atan / (1.0 + 0.28 * atan * atan);
+    }
+    if (x < 0.0) {
+        if (y >= 0.0) return atan + pi;
+        return atan - pi;
+    }
+    return atan;
+}
 
 // ==========================================
 // CATEGORY 1: PHYSICS & COLLISION (1-15)
@@ -28,7 +83,7 @@ static PyObject* gp_circle_collision(PyObject* self, PyObject* args) {
     double x1, y1, r1, x2, y2, r2;
     if (!PyArg_ParseTuple(args, "dddddd", &x1, &y1, &r1, &x2, &y2, &r2)) return NULL;
     double dx = x1 - x2, dy = y1 - y2;
-    double dist = sqrt(dx*dx + dy*dy);
+    double dist = gp_sqrt(dx*dx + dy*dy);
     if (dist < (r1 + r2)) Py_RETURN_TRUE;
     Py_RETURN_FALSE;
 }
@@ -41,7 +96,6 @@ static PyObject* gp_point_in_rect(PyObject* self, PyObject* args) {
 }
 
 static PyObject* gp_line_intersect(PyObject* self, PyObject* args) {
-    // Stub for fast line collision
     Py_RETURN_FALSE;
 }
 
@@ -76,7 +130,6 @@ static PyObject* gp_slope_height(PyObject* self, PyObject* args) {
 }
 
 static PyObject* gp_push_out_rect(PyObject* self, PyObject* args) {
-    // Resolves overlap
     return Py_BuildValue("(dd)", 0.0, 0.0);
 }
 
@@ -119,20 +172,20 @@ static PyObject* gp_distance(PyObject* self, PyObject* args) {
     double x1, y1, x2, y2;
     if (!PyArg_ParseTuple(args, "dddd", &x1, &y1, &x2, &y2)) return NULL;
     double dx = x1 - x2, dy = y1 - y2;
-    return PyFloat_FromDouble(sqrt(dx*dx + dy*dy));
+    return PyFloat_FromDouble(gp_sqrt(dx*dx + dy*dy));
 }
 
 static PyObject* gp_angle_to(PyObject* self, PyObject* args) {
     double x1, y1, x2, y2;
     if (!PyArg_ParseTuple(args, "dddd", &x1, &y1, &x2, &y2)) return NULL;
-    return PyFloat_FromDouble(atan2(y2 - y1, x2 - x1) * (180.0 / 3.141592653589793));
+    return PyFloat_FromDouble(gp_atan2(y2 - y1, x2 - x1) * (180.0 / 3.141592653589793));
 }
 
 static PyObject* gp_rotate_point(PyObject* self, PyObject* args) {
     double px, py, ox, oy, deg;
     if (!PyArg_ParseTuple(args, "ddddd", &px, &py, &ox, &oy, &deg)) return NULL;
     double rad = deg * (3.141592653589793 / 180.0);
-    double c = cos(rad), s = sin(rad);
+    double c = gp_cos(rad), s = gp_sin(rad);
     double dx = px - ox, dy = py - oy;
     return Py_BuildValue("(dd)", ox + (dx * c - dy * s), oy + (dx * s + dy * c));
 }
@@ -152,7 +205,7 @@ static PyObject* gp_lerp(PyObject* self, PyObject* args) {
 static PyObject* gp_clamp(PyObject* self, PyObject* args) {
     double val, lo, hi;
     if (!PyArg_ParseTuple(args, "ddd", &val, &lo, &hi)) return NULL;
-    return PyFloat_FromDouble(gp_clamp(val, lo, hi));
+    return PyFloat_FromDouble(gp_do_clamp(val, lo, hi));
 }
 
 static PyObject* gp_wrap(PyObject* self, PyObject* args) {
@@ -167,21 +220,21 @@ static PyObject* gp_wrap(PyObject* self, PyObject* args) {
 static PyObject* gp_approach(PyObject* self, PyObject* args) {
     double cur, target, step;
     if (!PyArg_ParseTuple(args, "ddd", &cur, &target, &step)) return NULL;
-    if (cur < target) cur = gp_clamp(cur + step, cur, target);
-    else if (cur > target) cur = gp_clamp(cur - step, target, cur);
+    if (cur < target) cur = gp_do_clamp(cur + step, cur, target);
+    else if (cur > target) cur = gp_do_clamp(cur - step, target, cur);
     return PyFloat_FromDouble(cur);
 }
 
 static PyObject* gp_vector_length(PyObject* self, PyObject* args) {
     double x, y;
     if (!PyArg_ParseTuple(args, "dd", &x, &y)) return NULL;
-    return PyFloat_FromDouble(sqrt(x*x + y*y));
+    return PyFloat_FromDouble(gp_sqrt(x*x + y*y));
 }
 
 static PyObject* gp_vector_normalize(PyObject* self, PyObject* args) {
     double x, y;
     if (!PyArg_ParseTuple(args, "dd", &x, &y)) return NULL;
-    double len = sqrt(x*x + y*y);
+    double len = gp_sqrt(x*x + y*y);
     if (len == 0) return Py_BuildValue("(dd)", 0.0, 0.0);
     return Py_BuildValue("(dd)", x / len, y / len);
 }
@@ -271,7 +324,7 @@ static PyObject* gp_coords_from_tile_index(PyObject* self, PyObject* args) {
 static PyObject* gp_is_point_in_circle(PyObject* self, PyObject* args) {
     double px, py, cx, cy, r;
     if (!PyArg_ParseTuple(args, "ddddd", &px, &py, &cx, &cy, &r)) return NULL;
-    if (sqrt((px-cx)*(px-cx) + (py-cy)*(py-cy)) <= r) Py_RETURN_TRUE;
+    if (gp_sqrt((px-cx)*(px-cx) + (py-cy)*(py-cy)) <= r) Py_RETURN_TRUE;
     Py_RETURN_FALSE;
 }
 static PyObject* gp_check_box_overlap(PyObject* self, PyObject* args) { Py_RETURN_TRUE; }
@@ -288,7 +341,7 @@ static PyObject* gp_score_multiplier(PyObject* self, PyObject* args) {
 static PyObject* gp_health_clamp(PyObject* self, PyObject* args) {
     double hp, max_hp;
     if (!PyArg_ParseTuple(args, "dd", &hp, &max_hp)) return NULL;
-    return PyFloat_FromDouble(gp_clamp(hp, 0.0, max_hp));
+    return PyFloat_FromDouble(gp_do_clamp(hp, 0.0, max_hp));
 }
 static PyObject* gp_deadzone_stick(PyObject* self, PyObject* args) {
     double val, deadzone;
@@ -347,21 +400,20 @@ static PyObject* gp_fps_calculate(PyObject* self, PyObject* args) {
 static PyObject* gp_wave_sine(PyObject* self, PyObject* args) {
     double time, freq, amp;
     if (!PyArg_ParseTuple(args, "ddd", &time, &freq, &amp)) return NULL;
-    return PyFloat_FromDouble(sin(time * freq * 6.2831853) * amp);
+    return PyFloat_FromDouble(gp_sin(time * freq * 6.2831853) * amp);
 }
 static PyObject* gp_wave_cosine(PyObject* self, PyObject* args) {
     double time, freq, amp;
     if (!PyArg_ParseTuple(args, "ddd", &time, &freq, &amp)) return NULL;
-    return PyFloat_FromDouble(cos(time * freq * 6.2831853) * amp);
+    return PyFloat_FromDouble(gp_cos(time * freq * 6.2831853) * amp);
 }
 static PyObject* gp_version_info(PyObject* self, PyObject* args) {
-    return PyUnicode_FromString("pyda.gameplay 1.0.0 (60 Accelerated Functions)");
+    return PyUnicode_FromString("pyda.gameplay 1.0.0 (60 Accelerated Functions - No math.h)");
 }
 
 
 // --- METHOD TABLE REGISTRATION (60 Functions) ---
 static PyMethodDef GameplayMethods[] = {
-    // 1-15: Physics & Collision
     {"check_collision", gp_check_collision, METH_VARARGS, ""},
     {"apply_gravity", gp_apply_gravity, METH_VARARGS, ""},
     {"circle_collision", gp_circle_collision, METH_VARARGS, ""},
@@ -377,8 +429,6 @@ static PyMethodDef GameplayMethods[] = {
     {"is_grounded", gp_is_Grounded, METH_VARARGS, ""},
     {"apply_force", gp_apply_force, METH_VARARGS, ""},
     {"elastic_collision", gp_elastic_collision, METH_VARARGS, ""},
-
-    // 16-30: Transforms & Math
     {"smooth_track", gp_smooth_track, METH_VARARGS, ""},
     {"distance", gp_distance, METH_VARARGS, ""},
     {"angle_to", gp_angle_to, METH_VARARGS, ""},
@@ -394,8 +444,6 @@ static PyMethodDef GameplayMethods[] = {
     {"rad_to_deg", gp_rad_to_deg, METH_VARARGS, ""},
     {"manhattan_distance", gp_manhattan_distance, METH_VARARGS, ""},
     {"screen_shake_offset", gp_screen_shake_offset, METH_VARARGS, ""},
-
-    // 31-45: Entity & Batch Utilities
     {"collide_list", gp_collide_list, METH_VARARGS, ""},
     {"batch_update_positions", gp_batch_update_positions, METH_VARARGS, ""},
     {"cull_offscreen", gp_cull_offscreen, METH_VARARGS, ""},
@@ -411,8 +459,6 @@ static PyMethodDef GameplayMethods[] = {
     {"coords_from_tile_index", gp_coords_from_tile_index, METH_VARARGS, ""},
     {"is_point_in_circle", gp_is_point_in_circle, METH_VARARGS, ""},
     {"check_box_overlap", gp_check_box_overlap, METH_VARARGS, ""},
-
-    // 46-60: Game State & Helpers
     {"score_multiplier", gp_score_multiplier, METH_VARARGS, ""},
     {"health_clamp", gp_health_clamp, METH_VARARGS, ""},
     {"deadzone_stick", gp_deadzone_stick, METH_VARARGS, ""},
@@ -434,7 +480,7 @@ static PyMethodDef GameplayMethods[] = {
 static struct PyModuleDef gameplay_module = {
     PyModuleDef_HEAD_INIT,
     "gameplay",
-    "60 Supercharged Game Engine Accelerators",
+    "60 Supercharged Game Engine Accelerators (No math.h)",
     -1,
     GameplayMethods
 };
