@@ -4,7 +4,7 @@
 
 // --- INLINE GAME MATH HELPERS ---
 static inline double gp_abs(double x) { return x < 0 ? -x : x; }
-static inline double gp_clamp(double x, double lo, double hi) { return x < lo ? lo : (x > hi ? hi : x); }
+static inline double gp_do_clamp(double x, double lo, double hi) { return x < lo ? lo : (x > hi ? hi : x); }
 
 // ==========================================
 // CATEGORY 1: PHYSICS & COLLISION (1-15)
