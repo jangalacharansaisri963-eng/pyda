@@ -1,0 +1,26 @@
+# Build / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+*.so
+*.pyd
+*.dll
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.eggs/
+*.manifest
+*.spec
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local
+.env
+*.log
