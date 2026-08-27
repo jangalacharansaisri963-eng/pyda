@@ -1,9 +1,35 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <stdlib.h>
-#include <math.h>
 
-static inline double gu_clamp(double x, double lo, double hi) { return x < lo ? lo : (x > hi ? hi : x); }
+// --- CUSTOM LOW-LEVEL MATH HELPERS (NO MATH.H) ---
+static inline double gu_abs(double x) { return x < 0 ? -x : x; }
+
+static inline double gu_do_clamp(double x, double lo, double hi) { 
+    return x < lo ? lo : (x > hi ? hi : x); 
+}
+
+static inline double gu_sin(double x) {
+    const double pi = 3.141592653589793;
+    const double two_pi = 6.283185307179586;
+    x = fmod(x + pi, two_pi);
+    if (x < 0) x += two_pi;
+    x -= pi;
+    
+    double x2 = x * x;
+    double term = x;
+    double sum = x;
+    term = -term * x2 / (2.0 * 3.0); sum += term;
+    term = -term * x2 / (4.0 * 5.0); sum += term;
+    term = -term * x2 / (6.0 * 7.0); sum += term;
+    term = -term * x2 / (8.0 * 9.0); sum += term;
+    return sum;
+}
+
+static inline double gu_cos(double x) {
+    const double pi = 3.141592653589793;
+    return gu_sin(x + pi / 2.0);
+}
 
 // 136. Linear Interpolation (Value)
 static PyObject* gu_lerp(PyObject* self, PyObject* args) {
@@ -16,7 +42,7 @@ static PyObject* gu_lerp(PyObject* self, PyObject* args) {
 static PyObject* gu_clamp(PyObject* self, PyObject* args) {
     double val, lo, hi;
     if (!PyArg_ParseTuple(args, "ddd", &val, &lo, &hi)) return NULL;
-    return PyFloat_FromDouble(gu_clamp(val, lo, hi));
+    return PyFloat_FromDouble(gu_do_clamp(val, lo, hi));
 }
 
 // 138. Value Wrapping (Circular bounds)
@@ -33,8 +59,8 @@ static PyObject* gu_wrap(PyObject* self, PyObject* args) {
 static PyObject* gu_approach(PyObject* self, PyObject* args) {
     double cur, target, step;
     if (!PyArg_ParseTuple(args, "ddd", &cur, &target, &step)) return NULL;
-    if (cur < target) cur = gu_clamp(cur + step, cur, target);
-    else if (cur > target) cur = gu_clamp(cur - step, target, cur);
+    if (cur < target) cur = gu_do_clamp(cur + step, cur, target);
+    else if (cur > target) cur = gu_do_clamp(cur - step, target, cur);
     return PyFloat_FromDouble(cur);
 }
 
@@ -66,14 +92,14 @@ static PyObject* gu_chance(PyObject* self, PyObject* args) {
 static PyObject* gu_wave_sine(PyObject* self, PyObject* args) {
     double time, freq, amp;
     if (!PyArg_ParseTuple(args, "ddd", &time, &freq, &amp)) return NULL;
-    return PyFloat_FromDouble(sin(time * freq * 6.2831853) * amp);
+    return PyFloat_FromDouble(gu_sin(time * freq * 6.2831853) * amp);
 }
 
 // 144. Cosine Wave Generator
 static PyObject* gu_wave_cosine(PyObject* self, PyObject* args) {
     double time, freq, amp;
     if (!PyArg_ParseTuple(args, "ddd", &time, &freq, &amp)) return NULL;
-    return PyFloat_FromDouble(cos(time * freq * 6.2831853) * amp);
+    return PyFloat_FromDouble(gu_cos(time * freq * 6.2831853) * amp);
 }
 
 // 145. Timer Countdown Step
