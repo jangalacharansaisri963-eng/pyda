@@ -66,10 +66,10 @@ static inline double pyda_tanh(double x) {
         return PyFloat_FromDouble(expr); \
     }
 
-#define MATH_U_CUSTOM(name, body) \
+#define MATH_U_CUSTOM(name, ...) \
     static PyObject* math_##name(PyObject* self, PyObject* args) { \
         double x; if (!PyArg_ParseTuple(args, "d", &x)) return NULL; \
-        body \
+        __VA_ARGS__ \
     }
 
 #define MATH_B(name, expr) \
@@ -78,10 +78,10 @@ static inline double pyda_tanh(double x) {
         return PyFloat_FromDouble(expr); \
     }
 
-#define MATH_B_CUSTOM(name, body) \
+#define MATH_B_CUSTOM(name, ...) \
     static PyObject* math_##name(PyObject* self, PyObject* args) { \
         double a, b; if (!PyArg_ParseTuple(args, "dd", &a, &b)) return NULL; \
-        body \
+        __VA_ARGS__ \
     }
 
 #define MATH_T(name, expr) \
@@ -413,7 +413,7 @@ static PyMethodDef MathModuleMethods[] = {
     {"combinatorics_nCr", math_combinatorics_nCr, METH_VARARGS, ""}, {"combinatorics_nPr", math_combinatorics_nPr, METH_VARARGS, ""},
     {"variance_kernel", math_variance_kernel, METH_VARARGS, ""}, {"std_dev_kernel", math_std_dev_kernel, METH_VARARGS, ""},
     {"z_score_kernel", math_z_score_kernel, METH_VARARGS, ""}, {"mean_deviation", math_mean_deviation, METH_VARARGS, ""},
-     {"root_mean_square", math_root_mean_square, METH_VARARGS, ""}, {"energy_kernel", math_energy_kernel, METH_VARARGS, ""},
+    {"root_mean_square", math_root_mean_square, METH_VARARGS, ""}, {"energy_kernel", math_energy_kernel, METH_VARARGS, ""},
     {"momentum_kernel", math_momentum_kernel, METH_VARARGS, ""}, {"kinetic_energy", math_kinetic_energy, METH_VARARGS, ""},
     {"potential_energy", math_potential_energy, METH_VARARGS, ""}, {"gravity_force", math_gravity_force, METH_VARARGS, ""},
     {"celsius_to_kelvin", math_celsius_to_kelvin, METH_VARARGS, ""}, {"kelvin_to_celsius", math_kelvin_to_celsius, METH_VARARGS, ""},
