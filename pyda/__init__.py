@@ -1,5 +1,5 @@
 """
-pyda.pygame: Pure C-accelerated native game engine.
+pyda: Pure C-accelerated native game engine (SDL2 backend).
 """
 from ._core import (
     init,
@@ -23,3 +23,6 @@ __all__ = [
     "init", "quit", "set_mode", "flip", "pump_events", "get_ticks", "delay",
     "QUIT", "KEYDOWN", "KEYUP", "MOUSEBUTTONDOWN", "MOUSEBUTTONUP", "MOUSEMOTION"
 ]
+
+__version__ = "1.0.0"
+
