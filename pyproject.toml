@@ -1,14 +1,25 @@
-[build-system]
-requires = ["setuptools>=61.0.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "pyda"
 version = "1.0.0"
-description = "High-performance custom game engine"
+description = "High-performance custom game engine (C + SDL2, zero Pygame)"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
+license = {text = "MIT"}
+authors = [{name = "pyda contributors"}]
+keywords = ["game", "engine", "sdl2", "c-extension", "2d"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C",
+    "Topic :: Games/Entertainment",
+    "Topic :: Software Development :: Libraries",
+]
 
 [tool.setuptools.packages.find]
 include = ["pyda*"]
+
+[tool.setuptools]
+zip-safe = false
+
