@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dan-pyda"
-version = "1.0.0"
+version = "1.0.1"
 description = "High-performance custom game engine (C + SDL2, zero Pygame)"
 readme = "README.md"
 requires-python = ">=3.8"
