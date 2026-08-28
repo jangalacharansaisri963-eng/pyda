@@ -28,7 +28,7 @@ def make_ext(name, sources, needs_sdl=False):
 
 setup(
     name="pyda",
-    version="1.0.0",
+    version="1.0.1",
     packages=['pyda'],
     ext_modules=[
         # Core (C defines PyInit__core / m_name="_core")
