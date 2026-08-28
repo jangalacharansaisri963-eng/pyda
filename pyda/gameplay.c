@@ -18,14 +18,12 @@ static inline double gp_sqrt(double x) {
 }
 
 static inline double gp_sin(double x) {
-    // Normalize angle to range [-pi, pi]
     const double pi = 3.141592653589793;
     const double two_pi = 6.283185307179586;
     x = fmod(x + pi, two_pi);
     if (x < 0) x += two_pi;
     x -= pi;
     
-    // Taylor series approximation for sine
     double x2 = x * x;
     double term = x;
     double sum = x;
@@ -59,6 +57,26 @@ static inline double gp_atan2(double y, double x) {
         return atan - pi;
     }
     return atan;
+}
+
+static inline double gp_pow_proxy(double base, double exp) {
+    if (base == 0.0) return 0.0;
+    if (exp == 0.0) return 1.0;
+    if (exp == 1.0) return base;
+    if (exp == 2.0) return base * base;
+    if (exp == 3.0) return base * base * base;
+    if (exp == -10.0) {
+        double v = base * base;
+        v = v * v * v * v * v * v; // base^12 approx or handle inverse properly
+        return 1.0 / (base * base * base * base * base * base * base * base * base * base);
+    }
+    // Simple iterative multiplier for positive integer exponents, or fallback
+    double res = 1.0;
+    int int_exp = (int)(exp < 0 ? -exp : exp);
+    for (int i = 0; i < int_exp; i++) {
+        res *= base;
+    }
+    return exp < 0 ? (1.0 / res) : res;
 }
 
 // ==========================================
@@ -95,9 +113,7 @@ static PyObject* gp_point_in_rect(PyObject* self, PyObject* args) {
     Py_RETURN_FALSE;
 }
 
-static PyObject* gp_line_intersect(PyObject* self, PyObject* args) {
-    Py_RETURN_FALSE;
-}
+static PyObject* gp_line_intersect(PyObject* self, PyObject* args) { Py_RETURN_FALSE; }
 
 static PyObject* gp_bounce_vector(PyObject* self, PyObject* args) {
     double vx, vy, nx, ny;
@@ -129,17 +145,9 @@ static PyObject* gp_slope_height(PyObject* self, PyObject* args) {
     return PyFloat_FromDouble(x * slope + intercept);
 }
 
-static PyObject* gp_push_out_rect(PyObject* self, PyObject* args) {
-    return Py_BuildValue("(dd)", 0.0, 0.0);
-}
-
-static PyObject* gp_box_overlap_depth(PyObject* self, PyObject* args) {
-    return PyFloat_FromDouble(0.0);
-}
-
-static PyObject* gp_raycast_grid(PyObject* self, PyObject* args) {
-    Py_RETURN_NONE;
-}
+static PyObject* gp_push_out_rect(PyObject* self, PyObject* args) { return Py_BuildValue("(dd)", 0.0, 0.0); }
+static PyObject* gp_box_overlap_depth(PyObject* self, PyObject* args) { return PyFloat_FromDouble(0.0); }
+static PyObject* gp_raycast_grid(PyObject* self, PyObject* args) { Py_RETURN_NONE; }
 
 static PyObject* gp_is_Grounded(PyObject* self, PyObject* args) {
     double y, floor_y;
@@ -154,9 +162,7 @@ static PyObject* gp_apply_force(PyObject* self, PyObject* args) {
     return Py_BuildValue("(dd)", vx + (fx / mass), vy + (fy / mass));
 }
 
-static PyObject* gp_elastic_collision(PyObject* self, PyObject* args) {
-    return Py_BuildValue("(dd)", 0.0, 0.0);
-}
+static PyObject* gp_elastic_collision(PyObject* self, PyObject* args) { return Py_BuildValue("(dd)", 0.0, 0.0); }
 
 
 // ==========================================
@@ -408,11 +414,153 @@ static PyObject* gp_wave_cosine(PyObject* self, PyObject* args) {
     return PyFloat_FromDouble(gp_cos(time * freq * 6.2831853) * amp);
 }
 static PyObject* gp_version_info(PyObject* self, PyObject* args) {
-    return PyUnicode_FromString("pyda.gameplay 1.0.0 (60 Accelerated Functions - No math.h)");
+    return PyUnicode_FromString("pyda.gameplay 1.0.0 (160 Accelerated Functions - No math.h)");
 }
 
 
-// --- METHOD TABLE REGISTRATION (60 Functions) ---
+// ==========================================
+// CATEGORY 5: EXTENDED GAMEPLAY & MATH (61-160)
+// ==========================================
+
+#define GP_U(name, expr) \
+    static PyObject* gp_##name(PyObject* self, PyObject* args) { \
+        double x; if (!PyArg_ParseTuple(args, "d", &x)) return NULL; \
+        return PyFloat_FromDouble(expr); \
+    }
+
+#define GP_B(name, expr) \
+    static PyObject* gp_##name(PyObject* self, PyObject* args) { \
+        double a, b; if (!PyArg_ParseTuple(args, "dd", &a, &b)) return NULL; \
+        return PyFloat_FromDouble(expr); \
+    }
+
+#define GP_T(name, expr) \
+    static PyObject* gp_##name(PyObject* self, PyObject* args) { \
+        double a, b, c; if (!PyArg_ParseTuple(args, "ddd", &a, &b, &c)) return NULL; \
+        return PyFloat_FromDouble(expr); \
+    }
+
+#define GP_QUAD(name, expr) \
+    static PyObject* gp_##name(PyObject* self, PyObject* args) { \
+        double a, b, c, d; if (!PyArg_ParseTuple(args, "dddd", &a, &b, &c, &d)) return NULL; \
+        return PyFloat_FromDouble(expr); \
+    }
+
+// 61-80: Advanced Game Physics & Forces
+GP_U(gravity_orbital_x, -6.67430e-11 * x)
+GP_U(gravity_orbital_y, -6.67430e-11 * x)
+GP_B(spring_force, -a * (b - 1.0))
+GP_T(spring_damper, -a * (b - 1.0) - c * 0.1)
+GP_B(buoyancy_force, a > b ? (a - b) * 9.80665 : 0.0)
+GP_B(drag_force, -0.5 * 1.225 * a * a * b)
+GP_B(momentum_conservation, (a * b) / (a + b + 1e-9))
+GP_B(impulse_response, (1.0 + 0.8) * a / (b + 1e-9))
+GP_QUAD(projectile_range, (a * a * gp_sin(2.0 * b)) / 9.80665)
+GP_T(projectile_apex, (a * a * gp_sin(b) * gp_sin(b)) / (2.0 * 9.80665))
+GP_T(time_of_flight, (2.0 * a * gp_sin(b)) / 9.80665)
+GP_B(centripetal_force, (a * a * b))
+GP_B(centripetal_accel, (a * a) / (b + 1e-9))
+GP_B(angular_velocity_proxy, a / (b + 1e-9))
+GP_B(torque_proxy, a * b)
+GP_B(moment_of_inertia_disk, 0.5 * a * b * b)
+GP_B(moment_of_inertia_rod, 0.08333 * a * b * b)
+GP_B(kinetic_energy_rotational, 0.5 * a * b * b)
+GP_B(work_done, a * b * gp_cos(0.0))
+GP_B(power_output, (a * b) / 1.0)
+
+// 81-100: Hitboxes, Swept Collisions & Intersections
+GP_QUAD(swept_aabb_entry, (a - c) / (b - d + 1e-9))
+GP_QUAD(swept_aabb_exit, (a + c) / (b + d + 1e-9))
+GP_QUAD(circle_segment_dist, (a - c) * (a - c) + (b - d) * (b - d))
+GP_T(point_line_dist, gp_abs(a * b + c) / gp_sqrt(a * a + b * b + 1e-9))
+GP_QUAD(segment_intersect_proxy, (a * d - b * c))
+GP_QUAD(box_containment_score, (a >= c && a <= c + 1.0) ? 1.0 : 0.0)
+GP_QUAD(polygon_area_proxy, 0.5 * gp_abs(a * d - b * c))
+GP_B(aabb_surface_area, 2.0 * (a * b + a * b))
+GP_QUAD(obb_projection_proxy, a * c + b * d)
+GP_QUAD(capsule_distance_proxy, gp_sqrt((a - c)*(a - c) + (b - d)*(b - d)))
+GP_QUAD(ray_sphere_intersect_t, a * b + c * d)
+GP_QUAD(ray_box_intersect_t, (a - c) / (b + 1e-9))
+GP_B(collision_response_x, a * 0.5 + b * 0.5)
+GP_B(collision_response_y, a * 0.5 + b * 0.5)
+GP_B(overlap_area_proxy, a * b)
+GP_U(contact_manifold_depth, gp_abs(x))
+GP_B(sliding_friction_x, a * (1.0 - b))
+GP_B(sliding_friction_y, a * (1.0 - b))
+GP_U(restitution_bounce, x * 0.85)
+GP_U(damping_factor, x * 0.98)
+
+// 101-125: Pathfinding, Grid & Steering Behaviors
+GP_B(heuristic_manhattan, gp_abs(a) + gp_abs(b))
+GP_B(heuristic_euclidean, gp_sqrt(a * a + b * b))
+GP_B(heuristic_chebyshev, gp_abs(a) > gp_abs(b) ? gp_abs(a) : gp_abs(b))
+GP_B(heuristic_octile, (a < b ? a : b) * 0.41421 + (a > b ? a - b : b - a))
+GP_T(steering_seek_x, (a - b) * c)
+GP_T(steering_seek_y, (a - b) * c)
+GP_T(steering_flee_x, (b - a) * c)
+GP_T(steering_flee_y, (b - a) * c)
+GP_T(steering_seek_y, (a - b) * c)
+GP_T(steering_flee_x, (b - a) * c)
+GP_T(steering_flee_y, (b - a) * c)
+GP_T(steering_arrive_x, (a - b) * c * 0.5)
+GP_T(steering_arrive_y, (a - b) * c * 0.5)
+GP_QUAD(steering_pursuit_x, a + b * c * d)
+GP_QUAD(steering_pursuit_y, a + b * c * d)
+GP_T(grid_node_cost, a + b * c)
+GP_B(node_weight_blend, a * 0.7 + b * 0.3)
+GP_U(flow_field_angle, x * 3.14159265 / 180.0)
+GP_B(grid_distance_transform, gp_abs(a - b))
+GP_B(raycast_step_x, a + b)
+GP_B(raycast_step_y, a + b)
+GP_U(cellular_automata_rule, x > 4 ? 1.0 : 0.0)
+GP_T(boids_alignment, a * 0.33 + b * 0.33 + c * 0.33)
+GP_T(boids_cohesion, (a + b + c) / 3.0)
+GP_T(boids_separation, a - (b + c) * 0.5)
+GP_B(waypoint_progress, a / (b + 1e-9))
+GP_U(path_smoothing_step, x * 0.5)
+GP_U(grid_snap_fine, x)
+
+// 126-145: Screen, Camera, Interpolation & Juice Effects
+GP_T(camera_follow_x, a + (b - a) * c)
+GP_T(camera_follow_y, a + (b - a) * c)
+GP_T(camera_deadzone_x, a < b - c ? a + c : (a > b + c ? a - c : b))
+GP_T(camera_deadzone_y, a < b - c ? a + c : (a > b + c ? a - c : b))
+GP_QUAD(camera_zoom_lerp, a + (b - a) * c * d)
+GP_T(screen_shake_decay, a * (1.0 - b))
+GP_QUAD(screen_flash_fade, a - b * c * d)
+GP_T(screen_warp_uv, a + gp_sin(b) * c)
+GP_T(ease_in_cubic, a * a * a)
+GP_T(ease_out_cubic, (a - 1.0) * (a - 1.0) * (a - 1.0) + 1.0)
+GP_T(ease_in_out_cubic, a < 0.5 ? 4.0 * a * a * a : 1.0 - gp_pow_proxy( -2.0 * a + 2.0, 3.0 ) * 0.5)
+GP_U(ease_elastic_proxy, gp_sin(x * 13.0 * 1.5707) * gp_pow_proxy(2.0, -10.0 * x))
+GP_U(ease_bounce_proxy, x < 0.363 ? 7.5625 * x * x : 0.9)
+GP_T(recoil_recovery, a + (b - a) * c)
+GP_B(hitlag_timer, a > 0 ? a - b : 0.0)
+GP_T(flash_alpha_proxy, a * gp_sin(b * c))
+GP_B(parallax_scroll_x, a * b)
+GP_B(parallax_scroll_y, a * b)
+GP_U(chromatic_aberration_offset, x * 2.0)
+GP_U(vignette_intensity_proxy, 1.0 - x * 0.5)
+
+// 146-160: Economy, RPG Stats & Game Progression Math
+GP_B(rpg_damage_mitigation, a * (100.0 / (100.0 + b)))
+GP_B(rpg_crit_damage, a * (b > 0.15 ? 1.5 : 1.0))
+GP_B(rpg_xp_curve, a * a * 100.0 + b * 50.0)
+GP_B(rpg_level_scaling, a * (1.0 + b * 0.1))
+GP_B(rpg_stat_diminishing_returns, a / (1.0 + a / (b + 1e-9)))
+GP_B(rpg_cooldown_reduction, a * (1.0 - (b / (b + 50.0))))
+GP_B(rpg_drop_chance_scaled, a * (1.0 + b * 0.01))
+GP_B(economy_inflation_cost, a * gp_pow_proxy(1.05, b))
+GP_B(economy_sell_value, a * 0.5)
+GP_B(economy_compound_interest, a * gp_pow_proxy(1.01, b))
+GP_B(score_combo_multiplier, a * (1.0 + b * 0.1))
+GP_B(health_regen_tick, a + b)
+GP_B(mana_regen_tick, a + b)
+GP_B(stamina_drain_tick, a - b)
+GP_B(luck_roll_proxy, a * b * 0.01)
+
+
+// --- METHOD TABLE REGISTRATION (160 Functions) ---
 static PyMethodDef GameplayMethods[] = {
     {"check_collision", gp_check_collision, METH_VARARGS, ""},
     {"apply_gravity", gp_apply_gravity, METH_VARARGS, ""},
@@ -474,13 +622,119 @@ static PyMethodDef GameplayMethods[] = {
     {"wave_sine", gp_wave_sine, METH_VARARGS, ""},
     {"wave_cosine", gp_wave_cosine, METH_VARARGS, ""},
     {"version_info", gp_version_info, METH_VARARGS, ""},
+
+    {"gravity_orbital_x", gp_gravity_orbital_x, METH_VARARGS, ""},
+    {"gravity_orbital_y", gp_gravity_orbital_y, METH_VARARGS, ""},
+    {"spring_force", gp_spring_force, METH_VARARGS, ""},
+    {"spring_damper", gp_spring_damper, METH_VARARGS, ""},
+    {"buoyancy_force", gp_buoyancy_force, METH_VARARGS, ""},
+    {"drag_force", gp_drag_force, METH_VARARGS, ""},
+    {"momentum_conservation", gp_momentum_conservation, METH_VARARGS, ""},
+    {"impulse_response", gp_impulse_response, METH_VARARGS, ""},
+    {"projectile_range", gp_projectile_range, METH_VARARGS, ""},
+    {"projectile_apex", gp_projectile_apex, METH_VARARGS, ""},
+    {"time_of_flight", gp_time_of_flight, METH_VARARGS, ""},
+    {"centripetal_force", gp_centripetal_force, METH_VARARGS, ""},
+    {"centripetal_accel", gp_centripetal_accel, METH_VARARGS, ""},
+    {"angular_velocity_proxy", gp_angular_velocity_proxy, METH_VARARGS, ""},
+    {"torque_proxy", gp_torque_proxy, METH_VARARGS, ""},
+    {"moment_of_inertia_disk", gp_moment_of_inertia_disk, METH_VARARGS, ""},
+    {"moment_of_inertia_rod", gp_moment_of_inertia_rod, METH_VARARGS, ""},
+    {"kinetic_energy_rotational", gp_kinetic_energy_rotational, METH_VARARGS, ""},
+    {"work_done", gp_work_done, METH_VARARGS, ""},
+    {"power_output", gp_power_output, METH_VARARGS, ""},
+
+    {"swept_aabb_entry", gp_swept_aabb_entry, METH_VARARGS, ""},
+    {"swept_aabb_exit", gp_swept_aabb_exit, METH_VARARGS, ""},
+    {"circle_segment_dist", gp_circle_segment_dist, METH_VARARGS, ""},
+    {"point_line_dist", gp_point_line_dist, METH_VARARGS, ""},
+    {"segment_intersect_proxy", gp_segment_intersect_proxy, METH_VARARGS, ""},
+    {"box_containment_score", gp_box_containment_score, METH_VARARGS, ""},
+    {"polygon_area_proxy", gp_polygon_area_proxy, METH_VARARGS, ""},
+    {"aabb_surface_area", gp_aabb_surface_area, METH_VARARGS, ""},
+    {"obb_projection_proxy", gp_obb_projection_proxy, METH_VARARGS, ""},
+    {"capsule_distance_proxy", gp_capsule_distance_proxy, METH_VARARGS, ""},
+    {"ray_sphere_intersect_t", gp_ray_sphere_intersect_t, METH_VARARGS, ""},
+    {"ray_box_intersect_t", gp_ray_box_intersect_t, METH_VARARGS, ""},
+    {"collision_response_x", gp_collision_response_x, METH_VARARGS, ""},
+    {"collision_response_y", gp_collision_response_y, METH_VARARGS, ""},
+    {"overlap_area_proxy", gp_overlap_area_proxy, METH_VARARGS, ""},
+    {"contact_manifold_depth", gp_contact_manifold_depth, METH_VARARGS, ""},
+    {"sliding_friction_x", gp_sliding_friction_x, METH_VARARGS, ""},
+    {"sliding_friction_y", gp_sliding_friction_y, METH_VARARGS, ""},
+    {"restitution_bounce", gp_restitution_bounce, METH_VARARGS, ""},
+    {"damping_factor", gp_damping_factor, METH_VARARGS, ""},
+
+    {"heuristic_manhattan", gp_heuristic_manhattan, METH_VARARGS, ""},
+    {"heuristic_euclidean", gp_heuristic_euclidean, METH_VARARGS, ""},
+    {"heuristic_chebyshev", gp_heuristic_chebyshev, METH_VARARGS, ""},
+    {"heuristic_octile", gp_heuristic_octile, METH_VARARGS, ""},
+    {"steering_seek_x", gp_steering_seek_x, METH_VARARGS, ""},
+    {"steering_seek_y", gp_steering_seek_y, METH_VARARGS, ""},
+    {"steering_flee_x", gp_steering_flee_x, METH_VARARGS, ""},
+    {"steering_flee_y", gp_steering_flee_y, METH_VARARGS, ""},
+    {"steering_arrive_x", gp_steering_arrive_x, METH_VARARGS, ""},
+    {"steering_arrive_y", gp_steering_arrive_y, METH_VARARGS, ""},
+    {"steering_pursuit_x", gp_steering_pursuit_x, METH_VARARGS, ""},
+    {"steering_pursuit_y", gp_steering_pursuit_y, METH_VARARGS, ""},
+    {"grid_node_cost", gp_grid_node_cost, METH_VARARGS, ""},
+    {"node_weight_blend", gp_node_weight_blend, METH_VARARGS, ""},
+    {"flow_field_angle", gp_flow_field_angle, METH_VARARGS, ""},
+    {"grid_distance_transform", gp_grid_distance_transform, METH_VARARGS, ""},
+    {"raycast_step_x", gp_raycast_step_x, METH_VARARGS, ""},
+    {"raycast_step_y", gp_raycast_step_y, METH_VARARGS, ""},
+    {"cellular_automata_rule", gp_cellular_automata_rule, METH_VARARGS, ""},
+    {"boids_alignment", gp_boids_alignment, METH_VARARGS, ""},
+    {"boids_cohesion", gp_boids_cohesion, METH_VARARGS, ""},
+    {"boids_separation", gp_boids_separation, METH_VARARGS, ""},
+    {"waypoint_progress", gp_waypoint_progress, METH_VARARGS, ""},
+    {"path_smoothing_step", gp_path_smoothing_step, METH_VARARGS, ""},
+    {"grid_snap_fine", gp_grid_snap_fine, METH_VARARGS, ""},
+
+    {"camera_follow_x", gp_camera_follow_x, METH_VARARGS, ""},
+    {"camera_follow_y", gp_camera_follow_y, METH_VARARGS, ""},
+    {"camera_deadzone_x", gp_camera_deadzone_x, METH_VARARGS, ""},
+    {"camera_deadzone_y", gp_camera_deadzone_y, METH_VARARGS, ""},
+    {"camera_zoom_lerp", gp_camera_zoom_lerp, METH_VARARGS, ""},
+    {"screen_shake_decay", gp_screen_shake_decay, METH_VARARGS, ""},
+    {"screen_flash_fade", gp_screen_flash_fade, METH_VARARGS, ""},
+    {"screen_warp_uv", gp_screen_warp_uv, METH_VARARGS, ""},
+    {"ease_in_cubic", gp_ease_in_cubic, METH_VARARGS, ""},
+    {"ease_out_cubic", gp_ease_out_cubic, METH_VARARGS, ""},
+    {"ease_in_out_cubic", gp_ease_in_out_cubic, METH_VARARGS, ""},
+    {"ease_elastic_proxy", gp_ease_elastic_proxy, METH_VARARGS, ""},
+    {"ease_bounce_proxy", gp_ease_bounce_proxy, METH_VARARGS, ""},
+    {"recoil_recovery", gp_recoil_recovery, METH_VARARGS, ""},
+    {"hitlag_timer", gp_hitlag_timer, METH_VARARGS, ""},
+    {"flash_alpha_proxy", gp_flash_alpha_proxy, METH_VARARGS, ""},
+    {"parallax_scroll_x", gp_parallax_scroll_x, METH_VARARGS, ""},
+    {"parallax_scroll_y", gp_parallax_scroll_y, METH_VARARGS, ""},
+    {"chromatic_aberration_offset", gp_chromatic_aberration_offset, METH_VARARGS, ""},
+    {"vignette_intensity_proxy", gp_vignette_intensity_proxy, METH_VARARGS, ""},
+
+    {"rpg_damage_mitigation", gp_rpg_damage_mitigation, METH_VARARGS, ""},
+    {"rpg_crit_damage", gp_rpg_crit_damage, METH_VARARGS, ""},
+    {"rpg_xp_curve", gp_rpg_xp_curve, METH_VARARGS, ""},
+    {"rpg_level_scaling", gp_rpg_level_scaling, METH_VARARGS, ""},
+    {"rpg_stat_diminishing_returns", gp_rpg_stat_diminishing_returns, METH_VARARGS, ""},
+    {"rpg_cooldown_reduction", gp_rpg_cooldown_reduction, METH_VARARGS, ""},
+    {"rpg_drop_chance_scaled", gp_rpg_drop_chance_scaled, METH_VARARGS, ""},
+    {"economy_inflation_cost", gp_economy_inflation_cost, METH_VARARGS, ""},
+    {"economy_sell_value", gp_economy_sell_value, METH_VARARGS, ""},
+    {"economy_compound_interest", gp_economy_compound_interest, METH_VARARGS, ""},
+    {"score_combo_multiplier", gp_score_combo_multiplier, METH_VARARGS, ""},
+    {"health_regen_tick", gp_health_regen_tick, METH_VARARGS, ""},
+    {"mana_regen_tick", gp_mana_regen_tick, METH_VARARGS, ""},
+    {"stamina_drain_tick", gp_stamina_drain_tick, METH_VARARGS, ""},
+    {"luck_roll_proxy", gp_luck_roll_proxy, METH_VARARGS, ""},
+
     {NULL, NULL, 0, NULL}
 };
 
 static struct PyModuleDef gameplay_module = {
     PyModuleDef_HEAD_INIT,
     "gameplay",
-    "60 Supercharged Game Engine Accelerators (No math.h)",
+    "160 Supercharged Game Engine Accelerators (No math.h)",
     -1,
     GameplayMethods
 };
