@@ -39,6 +39,7 @@ setup(
         # Core
         make_ext('pyda._core', ['pyda/core.c'], libraries=['SDL2']),
         make_ext('pyda.gameplay', ['pyda/gameplay.c']),
+        make_ext('pyda._game_primitives', ['pyda/_game_primitives.c']),
 
         # Engines (pure C, no SDL)
         make_ext('pyda.physics_engine', ['pyda/physics_engine.c']),
